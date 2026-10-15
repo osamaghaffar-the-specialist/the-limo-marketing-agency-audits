@@ -72,13 +72,16 @@ test('broken homepage is high-risk even without booking keyword', () => {
   assert.equal(report.top_findings[0].reason, 'TARGET_ROOT_FAILURE');
 });
 
-test('skipped non-web links are not false broken links', () => {
+test('skipped non-web links are ignored and do not downgrade a clean scan', () => {
   const report = reportFor([
     { url: target, parent: '', status: 200, state: 'OK' },
     { url: 'data:,', parent: target, status: 0, state: 'SKIPPED' },
     { url: 'mailto:test@example.com', parent: target, status: 0, state: 'SKIPPED' }
   ]);
   assert.equal(report.summary.broken_links, 0);
+  assert.equal(report.summary.blocked_or_unverified_links, 0);
+  assert.equal(report.summary.status, 'NO_HIGH_RISK_FOUND');
+  assert.equal(report.scan_integrity.client_delivery_eligible, true);
 });
 
 test('lead ID validation blocks path traversal and unsafe characters', () => {
