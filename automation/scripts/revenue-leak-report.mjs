@@ -35,8 +35,12 @@ const report = buildRevenueLeakReport({
 
 fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify(report, null, 2));
-console.log(JSON.stringify(report.summary));
+console.log(JSON.stringify({
+  ...report.summary,
+  client_delivery_eligible: report.scan_integrity.client_delivery_eligible,
+  negative_clearance_allowed: report.scan_integrity.negative_clearance_allowed
+}));
 
-if (report.summary.status === 'SCAN_INCONCLUSIVE') {
+if (!report.scan_integrity.client_delivery_eligible) {
   process.exitCode = 2;
 }
