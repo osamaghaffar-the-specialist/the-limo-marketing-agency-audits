@@ -25,10 +25,16 @@ function stateText(link) {
   return String(link.state || '').toUpperCase();
 }
 
+function isWebUrl(url) {
+  return /^https?:\/\//i.test(url || '');
+}
+
 function isBroken(link) {
   const state = stateText(link);
   const status = Number(link.status || 0);
-  return state.includes('BROKEN') || status >= 400 || status === 0;
+  if (state.includes('SKIPPED')) return false;
+  if (!isWebUrl(link.url)) return false;
+  return state.includes('BROKEN') || status >= 400;
 }
 
 function isRevenueRelated(link) {
@@ -36,7 +42,6 @@ function isRevenueRelated(link) {
 }
 
 function severity(link) {
-  const status = Number(link.status || 0);
   if (isBroken(link) && isRevenueRelated(link)) return 'HIGH';
   if (isBroken(link)) return 'MEDIUM';
   if (/^http:\/\//i.test(link.url || '')) return 'LOW';
