@@ -1,4 +1,4 @@
-const CONVERSION_PATTERN = /(book|booking|reserve|reservation|quote|enquiry|inquiry|contact|checkout|pay|payment|whatsapp|wa\.me|call[-_ ]?us|request[-_ ]?a[-_ ]?ride)/i;
+const CONVERSION_PATTERN = /(book|booking|reserve|reservation|quote|enquiry|inquiry|contact|checkout|pay|payment|whatsapp|wa\.me|call[-_ ]?us|request[-_ ]?a[-_ ]?ride|get[-_ ]?a[-_ ]?quote)/i;
 const SERVICE_CONTEXT_PATTERN = /(airport|transfer|chauffeur|fleet|vehicle|wedding|event|corporate|executive|limo|limousine|car[-_ ]?service)/i;
 const BLOCKED_STATUSES = new Set([401, 403, 429, 999]);
 const DEFINITIVE_BROKEN_STATUSES = new Set([404, 410]);
@@ -55,11 +55,12 @@ export function isBroken(link) {
 }
 
 export function isConversionTarget(link) {
-  return CONVERSION_PATTERN.test(String(link?.url || ''));
+  const text = `${link?.url || ''} ${link?.displayText || ''}`;
+  return CONVERSION_PATTERN.test(text);
 }
 
 export function isRevenueContext(link) {
-  const text = `${link?.url || ''} ${link?.parent || ''}`;
+  const text = `${link?.url || ''} ${link?.displayText || ''} ${link?.parent || ''}`;
   return CONVERSION_PATTERN.test(text) || SERVICE_CONTEXT_PATTERN.test(text);
 }
 
@@ -117,6 +118,7 @@ export function classifyLink(link, targetUrl) {
 
   return {
     url: link?.url || '',
+    display_text: link?.displayText || '',
     parent: link?.parent || '',
     status: link?.status ?? null,
     state: link?.state ?? null,
@@ -137,7 +139,7 @@ export function classifyLink(link, targetUrl) {
 function dedupe(items) {
   const seen = new Set();
   return items.filter((item) => {
-    const key = [item.url, item.parent, item.status, item.state].join('|');
+    const key = [item.url, item.parent, item.status, item.state, item.display_text].join('|');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
