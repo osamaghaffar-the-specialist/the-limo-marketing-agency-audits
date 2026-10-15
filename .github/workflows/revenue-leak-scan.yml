@@ -1,0 +1,79 @@
+name: Revenue Leak Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Website URL to scan
+        required: true
+        type: string
+      lead_id:
+        description: CRM lead ID
+        required: false
+        default: manual-test
+        type: string
+      business_name:
+        description: Business name
+        required: false
+        default: Manual Test
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: automation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: automation/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Crawl and validate links
+        shell: bash
+        run: |
+          set +e
+          npx linkinator "${{ inputs.target_url }}" \
+            --recurse \
+            --format JSON \
+            --verbosity debug \
+            --redirects warn \
+            --require-https warn \
+            --retry-errors \
+            --retry-errors-count 2 \
+            --concurrency 20 \
+            --timeout 15000 \
+            > raw-linkinator.json
+          EXIT_CODE=$?
+          echo "linkinator_exit_code=$EXIT_CODE" >> "$GITHUB_ENV"
+          test -s raw-linkinator.json
+
+      - name: Build CRM-safe revenue leak JSON
+        run: |
+          node scripts/revenue-leak-report.mjs \
+            --input=raw-linkinator.json \
+            --output="results/${{ inputs.lead_id }}/revenue-leak.json" \
+            --url="${{ inputs.target_url }}" \
+            --lead_id="${{ inputs.lead_id }}" \
+            --business_name="${{ inputs.business_name }}"
+
+      - name: Upload scan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: revenue-leak-${{ inputs.lead_id }}
+          path: automation/results/${{ inputs.lead_id }}/revenue-leak.json
+          retention-days: 7
