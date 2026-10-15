@@ -7,6 +7,6 @@
     "revenue-leak": "node scripts/revenue-leak-report.mjs"
   },
   "dependencies": {
-    "linkinator": "7.5.0"
+    "linkinator": "8.1.0"
   }
 }
