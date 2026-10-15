@@ -41,6 +41,7 @@ function normalizedWebUrl(value) {
 }
 
 export function isBlocked(link) {
+  if (!isWebUrl(link?.url)) return false;
   const status = asStatus(link);
   const state = asState(link);
   return BLOCKED_STATUSES.has(status) || state.includes('SKIPPED');
@@ -81,8 +82,6 @@ function confidence(link) {
 }
 
 export function classifyLink(link, targetUrl) {
-  const status = asStatus(link);
-  const state = asState(link);
   const blocked = isBlocked(link);
   const broken = isBroken(link);
   const conversionTarget = isConversionTarget(link);
@@ -95,7 +94,6 @@ export function classifyLink(link, targetUrl) {
   let reason = 'OBSERVED';
 
   if (blocked) {
-    severity = 'INFO';
     reason = 'UNVERIFIED_BLOCKED';
   } else if (broken && rootTarget) {
     severity = 'HIGH';
@@ -161,9 +159,10 @@ export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, e
   const revenueObserved = classified.filter((item) => item.revenue_context).length;
   const root = classified.find((item) => item.root_target);
 
-  const hasUsableScan = links.length > 0;
+  const webLinks = classified.filter((item) => isWebUrl(item.url));
+  const hasUsableScan = webLinks.length > 0;
   const rootBlocked = Boolean(root?.blocked);
-  const allObservedBlocked = links.length > 0 && classified.every((item) => item.blocked || !isWebUrl(item.url));
+  const allObservedBlocked = webLinks.length > 0 && webLinks.every((item) => item.blocked);
 
   let status = 'NO_HIGH_RISK_FOUND';
   if (!hasUsableScan || allObservedBlocked) {
@@ -192,6 +191,7 @@ export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, e
     scan_integrity: {
       raw_links_array_present: Array.isArray(raw?.links),
       scanned_links: links.length,
+      web_links_observed: webLinks.length,
       engine_exit_code: engineExitCode,
       root_target_observed: Boolean(root),
       root_target_blocked: rootBlocked,
