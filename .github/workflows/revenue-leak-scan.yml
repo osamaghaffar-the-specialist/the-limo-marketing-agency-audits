@@ -1,6 +1,9 @@
 name: Revenue Leak Scan
 
 on:
+  push:
+    branches:
+      - feature/free-intelligence-phase1
   workflow_dispatch:
     inputs:
       target_url:
@@ -23,62 +26,85 @@ permissions:
 
 jobs:
   scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
+    env:
+      TARGET_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.target_url || 'https://example.com' }}
+      LEAD_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.lead_id || 'ci-smoke' }}
+      BUSINESS_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.business_name || 'CI Smoke Test' }}
     defaults:
       run:
         working-directory: automation
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
-      - name: Install dependencies
+      - name: Install pinned dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Resolve scan inputs
-        shell: bash
-        run: |
-          echo "TARGET_URL=${{ inputs.target_url }}" >> "$GITHUB_ENV"
-          echo "LEAD_ID=${{ inputs.lead_id }}" >> "$GITHUB_ENV"
-          echo "BUSINESS_NAME=${{ inputs.business_name }}" >> "$GITHUB_ENV"
+      - name: Run regression tests
+        run: npm test
+
+      - name: Validate scan inputs
+        run: node scripts/validate-inputs.mjs
 
       - name: Crawl and validate links
         shell: bash
         run: |
           set +e
-          npx linkinator "$TARGET_URL" \
+          npx --no-install linkinator "$TARGET_URL" \
             --recurse \
             --format JSON \
             --verbosity debug \
             --redirects warn \
             --require-https warn \
+            --status-code "401:skip" \
+            --status-code "403:skip" \
+            --status-code "429:skip" \
             --retry-errors \
-            --retry-errors-count 2 \
-            --concurrency 20 \
-            --timeout 15000 \
+            --retry-errors-count 1 \
+            --concurrency 5 \
+            --timeout 12000 \
             > raw-linkinator.json
           EXIT_CODE=$?
-          echo "linkinator_exit_code=$EXIT_CODE" >> "$GITHUB_ENV"
+          echo "LINKINATOR_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_ENV"
           test -s raw-linkinator.json
+          node -e "JSON.parse(require('fs').readFileSync('raw-linkinator.json','utf8'))"
 
       - name: Build CRM-safe revenue leak JSON
+        shell: bash
         run: |
+          set +e
           node scripts/revenue-leak-report.mjs \
             --input=raw-linkinator.json \
             --output="results/$LEAD_ID/revenue-leak.json" \
             --url="$TARGET_URL" \
             --lead_id="$LEAD_ID" \
-            --business_name="$BUSINESS_NAME"
+            --business_name="$BUSINESS_NAME" \
+            --engine_exit_code="$LINKINATOR_EXIT_CODE"
+          REPORT_EXIT_CODE=$?
+          echo "REPORT_EXIT_CODE=$REPORT_EXIT_CODE" >> "$GITHUB_ENV"
+          exit 0
 
       - name: Upload scan artifact
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: revenue-leak-${{ env.LEAD_ID }}
           path: automation/results/${{ env.LEAD_ID }}/revenue-leak.json
-          retention-days: 7
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Enforce fail-closed scan gate
+        shell: bash
+        run: |
+          if [ "${REPORT_EXIT_CODE:-99}" != "0" ]; then
+            echo "Revenue leak scan is inconclusive or invalid. Blocking downstream use."
+            exit 1
+          fi
