@@ -5,9 +5,9 @@ import { isPublicIp, validateBusinessName, validateLeadId, validateTargetUrl } f
 
 const target = 'https://example.com/';
 
-function reportFor(links) {
+function reportFor(links, scanMeta = undefined) {
   return buildRevenueLeakReport({
-    raw: { links },
+    raw: { links, ...(scanMeta ? { scan_meta: scanMeta } : {}) },
     targetUrl: target,
     leadId: 'LD-TEST123',
     businessName: 'Test Chauffeurs',
@@ -23,6 +23,7 @@ test('clean scan is client-delivery eligible and has no high-risk findings', () 
   assert.equal(report.summary.status, 'NO_HIGH_RISK_FOUND');
   assert.equal(report.summary.high_risk_revenue_path_findings, 0);
   assert.equal(report.scan_integrity.client_delivery_eligible, true);
+  assert.equal(report.scan_integrity.negative_clearance_allowed, true);
 });
 
 test('broken booking target is high-risk', () => {
@@ -95,6 +96,38 @@ test('skipped non-web links are ignored and do not downgrade a clean scan', () =
   assert.equal(report.summary.blocked_or_unverified_links, 0);
   assert.equal(report.summary.status, 'NO_HIGH_RISK_FOUND');
   assert.equal(report.scan_integrity.client_delivery_eligible, true);
+});
+
+test('capped scan without observed high-risk issue cannot claim a clean client result', () => {
+  const report = reportFor([
+    { url: target, parent: '', status: 200, state: 'OK' },
+    { url: 'https://example.com/book', parent: target, status: 200, state: 'OK' }
+  ], {
+    bounded: true,
+    max_urls: 150,
+    cap_reached: true,
+    skipped_over_cap: 5,
+    skipped_for_safety: 0
+  });
+  assert.equal(report.summary.status, 'SCAN_PARTIAL_LIMITED');
+  assert.equal(report.scan_integrity.client_delivery_eligible, false);
+  assert.equal(report.scan_integrity.negative_clearance_allowed, false);
+});
+
+test('observed high-risk issue can be reported even when later coverage is capped', () => {
+  const report = reportFor([
+    { url: target, parent: '', status: 200, state: 'OK' },
+    { url: 'https://example.com/book-now', displayText: 'Book Now', parent: target, status: 404, state: 'BROKEN' }
+  ], {
+    bounded: true,
+    max_urls: 150,
+    cap_reached: true,
+    skipped_over_cap: 3,
+    skipped_for_safety: 0
+  });
+  assert.equal(report.summary.status, 'REVIEW_HIGH_RISK');
+  assert.equal(report.scan_integrity.client_delivery_eligible, true);
+  assert.equal(report.scan_integrity.negative_clearance_allowed, false);
 });
 
 test('lead ID validation blocks path traversal and unsafe characters', () => {
