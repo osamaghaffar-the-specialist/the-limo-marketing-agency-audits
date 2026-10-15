@@ -35,6 +35,19 @@ test('broken booking target is high-risk', () => {
   assert.equal(report.top_findings[0].reason, 'BROKEN_CONVERSION_TARGET');
 });
 
+test('anchor text can identify a broken conversion target even when URL is generic', () => {
+  const item = classifyLink({
+    url: 'https://example.com/go?id=42',
+    displayText: 'Book Now',
+    parent: target,
+    status: 404,
+    state: 'BROKEN'
+  }, target);
+  assert.equal(item.conversion_target, true);
+  assert.equal(item.severity, 'HIGH');
+  assert.equal(item.reason, 'BROKEN_CONVERSION_TARGET');
+});
+
 test('broken image on booking page is not incorrectly promoted to high-risk', () => {
   const item = classifyLink({
     url: 'https://example.com/assets/fleet-car.jpg',
