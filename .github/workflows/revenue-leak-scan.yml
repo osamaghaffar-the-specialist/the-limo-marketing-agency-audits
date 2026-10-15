@@ -1,9 +1,6 @@
 name: Revenue Leak Scan
 
 on:
-  push:
-    branches:
-      - feature/free-intelligence-phase1
   workflow_dispatch:
     inputs:
       target_url:
@@ -47,9 +44,9 @@ jobs:
       - name: Resolve scan inputs
         shell: bash
         run: |
-          echo "TARGET_URL=${{ inputs.target_url || 'https://example.com' }}" >> "$GITHUB_ENV"
-          echo "LEAD_ID=${{ inputs.lead_id || 'ci-smoke' }}" >> "$GITHUB_ENV"
-          echo "BUSINESS_NAME=${{ inputs.business_name || 'CI Smoke Test' }}" >> "$GITHUB_ENV"
+          echo "TARGET_URL=${{ inputs.target_url }}" >> "$GITHUB_ENV"
+          echo "LEAD_ID=${{ inputs.lead_id }}" >> "$GITHUB_ENV"
+          echo "BUSINESS_NAME=${{ inputs.business_name }}" >> "$GITHUB_ENV"
 
       - name: Crawl and validate links
         shell: bash
