@@ -1,9 +1,6 @@
 name: Revenue Leak Scan
 
 on:
-  push:
-    branches:
-      - feature/free-intelligence-phase1
   workflow_dispatch:
     inputs:
       target_url:
@@ -29,9 +26,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
-      TARGET_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.target_url || 'https://example.com' }}
-      LEAD_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.lead_id || 'ci-smoke' }}
-      BUSINESS_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.business_name || 'CI Smoke Test' }}
+      TARGET_URL: ${{ inputs.target_url }}
+      LEAD_ID: ${{ inputs.lead_id }}
+      BUSINESS_NAME: ${{ inputs.business_name }}
     defaults:
       run:
         working-directory: automation
