@@ -45,17 +45,8 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Install pinned dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Upload package lock snapshot
-        if: github.event_name == 'push'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: package-lock-snapshot
-          path: automation/package-lock.json
-          retention-days: 1
-          if-no-files-found: error
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run regression tests
         run: npm test
@@ -63,24 +54,14 @@ jobs:
       - name: Validate scan inputs
         run: node scripts/validate-inputs.mjs
 
-      - name: Crawl and validate links
+      - name: Run bounded network-safe link scan
         shell: bash
         run: |
           set +e
-          npx --no-install linkinator "$TARGET_URL" \
-            --recurse \
-            --format JSON \
-            --verbosity debug \
-            --redirects warn \
-            --require-https warn \
-            --status-code "401:skip" \
-            --status-code "403:skip" \
-            --status-code "429:skip" \
-            --retry-errors \
-            --retry-errors-count 1 \
-            --concurrency 5 \
-            --timeout 12000 \
-            > raw-linkinator.json
+          node scripts/bounded-link-scan.mjs \
+            --url="$TARGET_URL" \
+            --output=raw-linkinator.json \
+            --max_urls=150
           EXIT_CODE=$?
           echo "LINKINATOR_EXIT_CODE=$EXIT_CODE" >> "$GITHUB_ENV"
           test -s raw-linkinator.json
@@ -114,6 +95,6 @@ jobs:
         shell: bash
         run: |
           if [ "${REPORT_EXIT_CODE:-99}" != "0" ]; then
-            echo "Revenue leak scan is inconclusive or invalid. Blocking downstream use."
+            echo "Revenue leak scan is inconclusive, partial, or invalid. Blocking downstream client use."
             exit 1
           fi
