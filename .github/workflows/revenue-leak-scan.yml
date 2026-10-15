@@ -1,6 +1,9 @@
 name: Revenue Leak Scan
 
 on:
+  push:
+    branches:
+      - feature/free-intelligence-phase1
   workflow_dispatch:
     inputs:
       target_url:
@@ -41,11 +44,18 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Resolve scan inputs
+        shell: bash
+        run: |
+          echo "TARGET_URL=${{ inputs.target_url || 'https://example.com' }}" >> "$GITHUB_ENV"
+          echo "LEAD_ID=${{ inputs.lead_id || 'ci-smoke' }}" >> "$GITHUB_ENV"
+          echo "BUSINESS_NAME=${{ inputs.business_name || 'CI Smoke Test' }}" >> "$GITHUB_ENV"
+
       - name: Crawl and validate links
         shell: bash
         run: |
           set +e
-          npx linkinator "${{ inputs.target_url }}" \
+          npx linkinator "$TARGET_URL" \
             --recurse \
             --format JSON \
             --verbosity debug \
@@ -64,14 +74,14 @@ jobs:
         run: |
           node scripts/revenue-leak-report.mjs \
             --input=raw-linkinator.json \
-            --output="results/${{ inputs.lead_id }}/revenue-leak.json" \
-            --url="${{ inputs.target_url }}" \
-            --lead_id="${{ inputs.lead_id }}" \
-            --business_name="${{ inputs.business_name }}"
+            --output="results/$LEAD_ID/revenue-leak.json" \
+            --url="$TARGET_URL" \
+            --lead_id="$LEAD_ID" \
+            --business_name="$BUSINESS_NAME"
 
       - name: Upload scan artifact
         uses: actions/upload-artifact@v4
         with:
-          name: revenue-leak-${{ inputs.lead_id }}
-          path: automation/results/${{ inputs.lead_id }}/revenue-leak.json
+          name: revenue-leak-${{ env.LEAD_ID }}
+          path: automation/results/${{ env.LEAD_ID }}/revenue-leak.json
           retention-days: 7
