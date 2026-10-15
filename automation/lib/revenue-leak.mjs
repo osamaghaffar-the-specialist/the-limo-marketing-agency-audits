@@ -152,6 +152,7 @@ function severityRank(value) {
 
 export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, engineExitCode = null }) {
   const links = Array.isArray(raw?.links) ? raw.links : [];
+  const scanMeta = raw?.scan_meta && typeof raw.scan_meta === 'object' ? raw.scan_meta : {};
   const classified = links.map((link) => classifyLink(link, targetUrl));
   const actionable = dedupe(classified.filter((item) => item.broken || item.blocked || item.insecure_http));
   const broken = actionable.filter((item) => item.broken);
@@ -165,6 +166,8 @@ export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, e
   const hasUsableScan = webLinks.length > 0;
   const rootBlocked = Boolean(root?.blocked);
   const allObservedBlocked = webLinks.length > 0 && webLinks.every((item) => item.blocked);
+  const capReached = scanMeta.cap_reached === true;
+  const unsafeSkipped = Number(scanMeta.skipped_for_safety || 0);
 
   let status = 'NO_HIGH_RISK_FOUND';
   if (!hasUsableScan || allObservedBlocked) {
@@ -175,9 +178,13 @@ export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, e
     status = 'REVIEW_TECHNICAL_ISSUES';
   } else if (blocked.length > 0 || rootBlocked) {
     status = 'SCAN_PARTIAL_BLOCKED';
+  } else if (capReached || unsafeSkipped > 0) {
+    status = 'SCAN_PARTIAL_LIMITED';
   }
 
-  const clientDeliveryEligible = !['SCAN_INCONCLUSIVE', 'SCAN_PARTIAL_BLOCKED'].includes(status);
+  const partialCoverage = ['SCAN_INCONCLUSIVE', 'SCAN_PARTIAL_BLOCKED', 'SCAN_PARTIAL_LIMITED'].includes(status);
+  const clientDeliveryEligible = !partialCoverage || highRisk.length > 0;
+  const negativeClearanceAllowed = !partialCoverage && highRisk.length === 0;
   const sortedTopFindings = [...actionable]
     .filter((item) => item.severity !== 'INFO')
     .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
@@ -197,13 +204,20 @@ export function buildRevenueLeakReport({ raw, targetUrl, leadId, businessName, e
       engine_exit_code: engineExitCode,
       root_target_observed: Boolean(root),
       root_target_blocked: rootBlocked,
-      client_delivery_eligible: clientDeliveryEligible
+      bounded_scan: scanMeta.bounded === true,
+      max_urls: Number(scanMeta.max_urls || 0) || null,
+      cap_reached: capReached,
+      skipped_for_safety: unsafeSkipped,
+      skipped_over_cap: Number(scanMeta.skipped_over_cap || 0),
+      client_delivery_eligible: clientDeliveryEligible,
+      negative_clearance_allowed: negativeClearanceAllowed
     },
     claim_safety: {
       revenue_loss_amount_claimed: false,
       ranking_claimed: false,
       conversion_loss_claimed: false,
-      wording_rule: 'Report only observed technical path issues. Do not claim monetary loss, ranking loss, or conversion loss without separate evidence.'
+      full_site_coverage_claimed: false,
+      wording_rule: 'Report only observed technical path issues. Never claim monetary loss, ranking loss, conversion loss, or full-site clearance without separate evidence.'
     },
     summary: {
       scanned_links: links.length,
